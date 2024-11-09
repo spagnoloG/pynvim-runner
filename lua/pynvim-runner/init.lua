@@ -6,10 +6,8 @@ local config = {
     terminal_width = 80,
     auto_scroll = true,
     mappings = {
-        open_shell = "<leader>ts",
-        run_selection = "<leader>tr",
-        chain_execute = "<leader>tc",
-        send_function = "<leader>tf",
+        open_shell = "<leader>to",
+        run_selection = "<leader>ts",
         toggle_terminal = "<leader>tt",
     },
 }
@@ -18,19 +16,21 @@ local config = {
 local term_bufnr = nil
 local term_job_id = nil
 
+-- Setup function to apply user configuration and key mappings
 function M.setup(user_config)
     config = vim.tbl_extend("force", config, user_config or {})
     M.setup_keymaps()
 end
 
--- Configure key mappings
+-- Configure default key mappings
 function M.setup_keymaps()
     for action, mapping in pairs(config.mappings) do
-        if action == "run_selection" then
-            vim.api.nvim_set_keymap("v", mapping, ":lua require('pynvim-runner')." .. action .. "()<CR>", { noremap = true, silent = true })
-        else
-            vim.api.nvim_set_keymap("n", mapping, ":lua require('pynvim-runner')." .. action .. "()<CR>", { noremap = true, silent = true })
-        end
+        vim.api.nvim_set_keymap(
+            action == "run_selection" and "v" or "n",
+            mapping,
+            ":lua require('pynvim-runner')." .. action .. "()<CR>",
+            { noremap = true, silent = true }
+        )
     end
 end
 
@@ -48,31 +48,34 @@ function M.open_shell()
         if vim.bo[buf].buftype == "terminal" then
             term_bufnr = buf
             term_job_id = vim.b[buf].terminal_job_id
+            M.set_terminal_keymaps()
             break
         end
     end
 end
 
--- Function to close all existing terminal windows
+-- Close all existing terminal windows
 function M.close_existing_terminals()
     for _, win in ipairs(vim.api.nvim_list_wins()) do
         local buf = vim.api.nvim_win_get_buf(win)
         if vim.bo[buf].buftype == "terminal" then
-            vim.api.nvim_win_close(win, true)  -- Force close all terminal windows
+            vim.api.nvim_win_close(win, true)
         end
     end
 end
 
+-- Send lines to the most recent Python terminal
 function M.send_to_terminal(lines)
     if term_bufnr and vim.api.nvim_buf_is_valid(term_bufnr) and term_job_id then
         for _, line in ipairs(lines) do
             vim.fn.chansend(term_job_id, line .. "\n")
         end
     else
-        vim.notify("No active Python shell. Use <leader>ts to start a new one.", vim.log.levels.WARN)
+        vim.notify("No active Python shell. Use <leader>to to start a new one.", vim.log.levels.WARN)
     end
 end
 
+-- Run selected lines in the Python shell
 function M.run_selection()
     local selection = vim.fn.getline("'<", "'>")
     if #selection == 0 then
@@ -82,46 +85,26 @@ function M.run_selection()
     M.send_to_terminal(selection)
 end
 
-function M.chain_execute()
-    local start_line = vim.fn.search("^$", "bnW")
-    local end_line = vim.fn.search("^$", "nW") - 1
-    local lines = vim.api.nvim_buf_get_lines(0, start_line, end_line, false)
-
-    local chain = {}
-    for _, line in ipairs(lines) do
-        if line:find("[%.%+%|]$") then
-            table.insert(chain, line)
-        end
-    end
-
-    if #chain > 0 then
-        M.send_to_terminal(chain)
-    else
-        vim.notify("No executable chain found", vim.log.levels.WARN)
-    end
-end
-
-function M.send_function()
-    local ts_utils = require("nvim-treesitter.ts_utils")
-    local node = ts_utils.get_node_at_cursor()
-    while node do
-        if node:type() == "function_definition" then
-            local start_row, _, end_row, _ = node:range()
-            local lines = vim.api.nvim_buf_get_lines(0, start_row, end_row + 1, false)
-            M.send_to_terminal(lines)
-            return
-        end
-        node = node:parent()
-    end
-    vim.notify("No function found at cursor", vim.log.levels.INFO)
-end
-
 -- Toggle terminal width between configured size and 50% of the window width
 function M.toggle_terminal()
-    local current_width = vim.fn.winwidth(0)
-    local new_width = current_width == config.terminal_width and math.floor(vim.fn.winwidth(0) * 0.5) or config.terminal_width
-    vim.api.nvim_win_set_width(0, new_width)
-    vim.notify("Toggled terminal width to " .. new_width, vim.log.levels.INFO)
+    if term_bufnr and vim.api.nvim_buf_is_valid(term_bufnr) then
+        local term_win = vim.fn.bufwinid(term_bufnr)
+        if term_win ~= -1 then
+            local current_width = vim.api.nvim_win_get_width(term_win)
+            local new_width = current_width == config.terminal_width and math.floor(vim.fn.winwidth(0) * 0.5) or config.terminal_width
+            vim.api.nvim_win_set_width(term_win, new_width)
+            vim.notify("Toggled terminal width to " .. new_width, vim.log.levels.INFO)
+        else
+            vim.notify("Terminal window not found", vim.log.levels.WARN)
+        end
+    else
+        vim.notify("No active terminal to toggle width. Open it with <leader>to.", vim.log.levels.WARN)
+    end
+end
+
+-- Set up Esc mapping in terminal to focus back on the code window
+function M.set_terminal_keymaps()
+    vim.api.nvim_buf_set_keymap(term_bufnr, 't', '<Esc>', [[<C-\><C-n><C-w>p]], { noremap = true, silent = true })
 end
 
 return M
