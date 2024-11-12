@@ -14,11 +14,11 @@ use {
         require('pynvim-runner').setup({
             shell_cmd = "python3",  -- Set the shell command to use
             terminal_width = 90,  -- Custom width for terminal window
-            auto_scroll = false,  -- Disable auto-scroll
+            auto_scroll =  true,  -- Enable auto-scroll
             mappings = {
-                open_shell = "<leader>tp",      -- Remap open shell to <leader>tp
-                run_selection = "<leader>tr",   -- Remap run selection to <leader>tr
-                toggle_terminal = "<leader>tw", -- Remap toggle width to <leader>tw
+                open_shell = "<leader>to",      -- Remap open shell to <leader>to
+                run_selection = "<leader>ts",   -- Remap run selection to <leader>ts
+                toggle_terminal = "<leader>tt", -- Remap toggle width to <leader>tt
             }
         })
     end
