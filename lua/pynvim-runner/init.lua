@@ -64,12 +64,31 @@ function M.close_existing_terminals()
     end
 end
 
--- Send lines to the most recent Python terminal
 function M.send_to_terminal(lines)
     if term_bufnr and vim.api.nvim_buf_is_valid(term_bufnr) and term_job_id then
-        for _, line in ipairs(lines) do
-            vim.fn.chansend(term_job_id, line .. "\n")
+        -- Function to check and remove common indentation
+        local function remove_common_indentation(lines)
+            local min_indent = math.huge
+            for _, line in ipairs(lines) do
+                if line:find("%S") then  -- Skip empty lines
+                    local leading_spaces = line:match("^(%s*)")
+                    min_indent = math.min(min_indent, #leading_spaces)
+                end
+            end
+
+            -- Adjust lines by removing the minimum indentation
+            local adjusted_lines = {}
+            for _, line in ipairs(lines) do
+                table.insert(adjusted_lines, line:sub(min_indent + 1))
+            end
+            return adjusted_lines
         end
+
+        -- Adjust indentation and wrap in exec() to handle multiline blocks
+        local adjusted_lines = remove_common_indentation(lines)
+        local code_block = "exec('''\n" .. table.concat(adjusted_lines, "\n") .. "\n''')\n"
+
+        vim.fn.chansend(term_job_id, code_block)
     else
         vim.notify("No active Python shell. Use <leader>to to start a new one.", vim.log.levels.WARN)
     end
